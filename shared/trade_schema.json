@@ -1,0 +1,27 @@
+{
+	"$schema": "http://json-schema.org/draft-07/schema#",
+	"title": "Trade",
+	"type": "object",
+	"required": ["symbol","side","price","size","timestamp"],
+	"properties":{
+		"symbol": {
+			"type":"string",
+			"description": "e.g. BTCUSDT"
+		},
+		"side": {
+			"type":"string",
+			"enum": ["buy","sell"]
+		},
+		"price": {
+			"type":"number",
+		},
+		"size": {
+			"type":"number",
+			"description": "quantity traded" 
+		},
+		"timestamp": {
+			"type":"integer",
+			"description": "unix epoch milliseconds"
+		}
+	}
+}
