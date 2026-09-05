@@ -1,0 +1,16 @@
+.git
+.gitignore
+.idea
+.vscode
+*.md
+!README.md
+.env
+.env.*
+Dockerfile
+.dockerignore
+Makefile
+scripts/
+ingestor
+bin/
+coverage.out
+coverage.html
