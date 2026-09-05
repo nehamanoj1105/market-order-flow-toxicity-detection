@@ -4,8 +4,6 @@ Go service that pulls raw market data from an exchange (or a simulator), normali
 it into the team-wide `Trade` schema, and publishes it onto the message bus for the
 processing and scoring services.
 
-Owner: **Aayushman Singh** (concurrent stream ingestion, Go services, Kafka/RabbitMQ producer).
-
 ---
 
 ## 1. Where this sits in the pipeline
@@ -85,7 +83,6 @@ CSV_PATH=../data/sample_binance_trades.csv CSV_SPEED=50 ./bin/ingestor | jq -c
 ### 2.3 Against the real stack (Kafka)
 
 ```bash
-# from the repo root, once Adarsh's compose file is in place
 docker compose -f infra/docker-compose.yaml up -d kafka
 
 cd ingestion
@@ -145,7 +142,7 @@ Real environment variables win over `-env-file` values.
 
 ---
 
-## 4. Output contract (for Devnath and Neha)
+## 4. Output contract 
 
 **Kafka**
 

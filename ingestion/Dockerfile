@@ -2,7 +2,7 @@
 # Stage 1: build. Pinned, slim image; the module cache is mounted so repeated
 # local builds stay fast.
 # ---------------------------------------------------------------------------
-FROM golang:1.25-alpine AS build
+FROM golang:1.26-alpine AS build
 
 ARG VERSION=dev
 ARG COMMIT=none
