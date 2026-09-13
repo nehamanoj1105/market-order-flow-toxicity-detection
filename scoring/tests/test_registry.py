@@ -95,7 +95,7 @@ class TestPerSymbolThresholds:
         assert reg.get_or_create("ETHUSDT").threshold == 3.0
 
     def test_dogeusdt_lower_threshold(self):
-        """DOGEUSDT has a stricter threshold (2.5 < 3.0)."""
+        """DOGEUSDT has a more sensitive threshold (2.5 < 3.0 → alerts sooner)."""
         reg = _make_registry()
         assert reg.get_or_create("DOGEUSDT").threshold == 2.5
 

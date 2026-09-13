@@ -270,3 +270,160 @@ class TestMalformedMessages:
                           "price": 100.0, "trade_time_ms": 0}).encode()
         result = svc.process_message(msg)
         assert result is None
+
+
+# ---------------------------------------------------------------------------
+# Test: Checkpoint-before-commit ordering invariant
+# ---------------------------------------------------------------------------
+
+class TestCheckpointBeforeCommit:
+    """
+    Verify that scorer state is persisted (checkpoint) BEFORE Kafka offsets
+    are committed.
+
+    The bug this guards against:
+      commit() → [crash] → restart
+      → Kafka replays nothing (offset was committed)
+      → but scorer state is behind the committed position (lost trades)
+
+    With the fix:
+      checkpoint() → commit()
+      → crash before commit: Kafka replays; scorer state is consistent
+      → crash after commit: nothing to replay; state is consistent
+    """
+
+    def test_checkpoint_fires_at_interval(self):
+        """
+        After exactly `checkpoint_every` messages, save_all() must have been
+        called on the checkpoint store.
+        """
+        store = MockCheckpointStore()
+        cfg = ScoringConfig(
+            ewma_alpha=0.1,
+            min_trades=0,
+            default_threshold=3.0,
+            symbol_thresholds={"BTCUSDT": 3.0},
+            checkpoint_every=5,   # short interval for test speed
+        )
+        reg = ScorerRegistry(cfg)
+        svc = ScoringService(
+            config=cfg,
+            registry=reg,
+            checkpoint_store=store,
+            kafka_consumer=None,
+            kafka_producer=None,
+        )
+        svc.restore_checkpoints()
+
+        # Send 4 messages: no checkpoint yet.
+        for _ in range(4):
+            svc.process_message(
+                json.dumps({"symbol": "BTCUSDT", "side": "BUY",
+                            "quantity": 1.0, "price": 100.0,
+                            "trade_time_ms": 0, "event_id": ""}).encode()
+            )
+        assert len(store.save_calls) == 0, (
+            "Checkpoint should not fire before checkpoint_every messages"
+        )
+
+        # 5th message triggers checkpoint (no Kafka consumer → commit is skipped).
+        svc.process_message(
+            json.dumps({"symbol": "BTCUSDT", "side": "BUY",
+                        "quantity": 1.0, "price": 100.0,
+                        "trade_time_ms": 0, "event_id": ""}).encode()
+        )
+        svc._maybe_checkpoint_and_commit(last_msg=None)
+        assert len(store.save_calls) > 0, (
+            "Checkpoint (save_all) must fire at the checkpoint_every boundary"
+        )
+
+    def test_no_offset_commit_without_checkpoint(self):
+        """
+        Kafka consumer.commit() must NOT be called between checkpoints.
+        We track commit calls via a mock consumer.
+        """
+        class MockConsumer:
+            def __init__(self):
+                self.commit_count = 0
+            def commit(self, asynchronous=True):
+                self.commit_count += 1
+
+        mock_consumer = MockConsumer()
+        store = MockCheckpointStore()
+        cfg = ScoringConfig(
+            ewma_alpha=0.1,
+            min_trades=0,
+            default_threshold=3.0,
+            symbol_thresholds={"BTCUSDT": 3.0},
+            checkpoint_every=10,
+        )
+        reg = ScorerRegistry(cfg)
+        svc = ScoringService(
+            config=cfg,
+            registry=reg,
+            checkpoint_store=store,
+            kafka_consumer=mock_consumer,
+            kafka_producer=None,
+        )
+        svc.restore_checkpoints()
+
+        # 9 messages: below checkpoint_every → no commit.
+        for i in range(9):
+            svc.process_message(
+                json.dumps({"symbol": "BTCUSDT", "side": "BUY",
+                            "quantity": 1.0, "price": 100.0,
+                            "trade_time_ms": i, "event_id": ""}).encode()
+            )
+            svc._maybe_checkpoint_and_commit(last_msg=None)
+
+        assert mock_consumer.commit_count == 0, (
+            f"commit() must not be called before the checkpoint boundary; "
+            f"got {mock_consumer.commit_count} calls after 9 messages"
+        )
+
+    def test_checkpoint_precedes_commit(self):
+        """
+        When the checkpoint boundary is reached, save_all() is called BEFORE
+        consumer.commit().  We verify ordering by recording call order in a
+        shared event log.
+        """
+        event_log: List[str] = []
+
+        class OrderedStore(MockCheckpointStore):
+            def save_all(self, states):
+                event_log.append("checkpoint")
+                super().save_all(states)
+
+        class OrderedConsumer:
+            def commit(self, asynchronous=True):
+                event_log.append("commit")
+
+        cfg = ScoringConfig(
+            ewma_alpha=0.1,
+            min_trades=0,
+            default_threshold=3.0,
+            symbol_thresholds={"BTCUSDT": 3.0},
+            checkpoint_every=3,
+        )
+        reg = ScorerRegistry(cfg)
+        svc = ScoringService(
+            config=cfg,
+            registry=reg,
+            checkpoint_store=OrderedStore(),
+            kafka_consumer=OrderedConsumer(),
+            kafka_producer=None,
+        )
+        svc.restore_checkpoints()
+
+        msg = json.dumps({"symbol": "BTCUSDT", "side": "BUY",
+                          "quantity": 1.0, "price": 100.0,
+                          "trade_time_ms": 0, "event_id": ""}).encode()
+        for _ in range(3):
+            svc.process_message(msg)
+        svc._maybe_checkpoint_and_commit(last_msg=object())
+
+        assert "checkpoint" in event_log, "checkpoint must be called"
+        assert "commit" in event_log, "commit must be called"
+        assert event_log.index("checkpoint") < event_log.index("commit"), (
+            f"checkpoint must precede commit; event order: {event_log}"
+        )

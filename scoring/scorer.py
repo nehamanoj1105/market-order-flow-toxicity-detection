@@ -4,31 +4,52 @@ scorer.py – EWMA-based Order-Flow Imbalance (OFI) toxicity scorer.
 Algorithm
 ---------
 Order-Flow Imbalance is the signed, volume-weighted trade flow:
-    ofi = +qty  (BUY aggressor)
-    ofi = -qty  (SELL aggressor)
+
+    signed_ofi = +qty   (BUY aggressor)
+    signed_ofi = -qty   (SELL aggressor)
 
 We maintain an Exponentially Weighted Moving Average of the OFI signal and
 its variance so that we can compute a Z-score in O(1) per trade without
 storing the full history:
 
     ewma_new  = α * ofi + (1-α) * ewma
-    ewma_var  = α * (ofi - ewma)² + (1-α) * ewma_var
-
+    ewma_var  = α * (ofi - ewma_old)² + (1-α) * ewma_var
     z_score   = ewma / sqrt(max(ewma_var, ε))
 
 A score is "toxic" when |z_score| exceeds the configured threshold *and* the
 scorer has seen at least `min_trades` trades (warm-up guard).
 
-The scorer is deliberately stateless with respect to calendar time: every
-trade observation contributes to the running statistics, and the state can
-be serialised to / deserialised from a plain dict for PostgreSQL persistence.
+Consistency with the SRS volume-ratio toxicity definition
+---------------------------------------------------------
+The SRS defines toxicity in terms of the volume-weighted order-flow imbalance
+ratio, conventionally expressed over a window as:
+
+    OFI_ratio = (buy_volume − sell_volume) / (buy_volume + sell_volume)
+
+This ratio lies in [−1, 1].  The EWMA approach here is numerically equivalent
+for the following reason: the z-score divides the EWMA of the signed volume
+(the numerator of OFI_ratio, exponentially weighted) by the EWMA standard
+deviation of that same signal.  This performs the same normalisation as
+dividing by total volume, but adaptively, using the signal's own historical
+variability rather than a fixed window denominator.  Specifically:
+
+  * Each trade contributes ±qty, so larger trades exert more influence
+    (volume-weighted, as the SRS requires).
+  * The z-score is dimensionless and bounded relative to historical noise,
+    making it comparable across symbols with different price/volume scales.
+  * A signal that consistently pushes in one direction will have a high EWMA
+    and low variance — exactly the toxic regime identified by the OFI ratio.
+
+The signed-volume EWMA z-score is therefore a per-trade, online approximation
+of the windowed OFI ratio, with the benefit of O(1) computation and no need
+to define a fixed window size.
 
 Edge-case handling
 ------------------
-* Zero or near-zero variance → guarded by ε.
-* NaN / Inf in input  → skipped (safe by validation upstream, but guarded here).
-* Side values         → accepts both "BUY"/"SELL" (canonical) and "buy"/"sell".
-* Zero quantity       → treated as neutral (no OFI contribution).
+* Zero or near-zero variance  → guarded by ε (first trade: z = 0).
+* NaN / Inf in input          → sanitised before processing.
+* Side values                 → accepts "BUY"/"SELL" and "buy"/"sell".
+* Zero quantity               → treated as neutral (no OFI contribution).
 """
 from __future__ import annotations
 

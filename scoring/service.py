@@ -12,20 +12,33 @@ Lifecycle
    b. Route to the correct symbol scorer (get_or_create).
    c. Call process_trade() EXACTLY ONCE.
    d. If the result is toxic, publish an alert to `trades.alerts`.
-   e. Commit the Kafka offset (at-least-once; idempotent with event_id).
-   f. Periodically checkpoint scorer state to PostgreSQL.
-5. On SIGINT / SIGTERM flush checkpoints and close.
+5. Every `checkpoint_every` messages (and on clean shutdown):
+   a. Checkpoint ALL scorer states to PostgreSQL FIRST.
+   b. Commit the accumulated Kafka offsets SECOND.
+   This ordering guarantees: checkpointed state ≥ committed offset position.
+   On any crash, Kafka replays up to `checkpoint_every` uncommitted messages
+   (at-least-once), but the scorer state is always consistent with or ahead
+   of the replay window.
+6. On SIGINT / SIGTERM flush checkpoints then commit, then close.
 
-Double-processing prevention
------------------------------
-State is restored from PostgreSQL BEFORE the consumer starts reading Kafka
-messages.  There is exactly one call to process_trade() per Kafka message.
-The scorer is never reset after restore.
+Checkpoint-before-commit invariant
+-----------------------------------
+Kafka offsets are NEVER committed ahead of a PostgreSQL checkpoint.  The
+sequence is strictly:
 
-At-least-once delivery
------------------------
-Offsets are committed after publish succeeds.  The event_id field (UUIDv4
-set by the ingestor) can be used by downstream consumers to deduplicate.
+    process_trade()  [updates in-memory EWMA]
+        ...                (repeat for up to checkpoint_every messages)
+    save_all()       [flush scorer states to PostgreSQL]
+    consumer.commit()  [only now advance the Kafka offset]
+
+If the service crashes between `process_trade()` and `save_all()`, Kafka
+replays the uncommitted messages on the next start.  The scorer state from
+the previous checkpoint is restored first, so those messages are applied to
+a consistent base.  The EWMA may count them twice (at-least-once semantics),
+but it will NEVER silently drop them from the state.
+
+The `event_id` field (UUIDv4 set by the ingestor) can be used by downstream
+consumers of `trades.alerts` to deduplicate re-emitted alerts.
 """
 from __future__ import annotations
 
@@ -118,18 +131,44 @@ class ScoringService:
                 state.symbol, state.ewma, state.ewma_var, state.trade_count,
             )
 
-    def _maybe_checkpoint(self, symbol: str) -> None:
-        """Save scorer state every `checkpoint_every` trades for this symbol."""
-        count = self._trades_since_checkpoint.get(symbol, 0) + 1
-        self._trades_since_checkpoint[symbol] = count
-        if count >= self._config.checkpoint_every:
-            scorer = self._registry.get(symbol)
-            if scorer is not None:
-                try:
-                    self._store.save(scorer.state)
-                except Exception as exc:
-                    logger.warning("checkpoint save failed for %s: %s", symbol, exc)
-            self._trades_since_checkpoint[symbol] = 0
+    def _maybe_checkpoint_and_commit(self, last_msg) -> bool:
+        """
+        Checkpoint scorer states to PostgreSQL, then commit the Kafka offset.
+
+        This ordering is the critical invariant:
+          checkpoint (PG write) → commit (Kafka write)
+
+        Returns True if a checkpoint+commit cycle was performed.
+        Resets the per-symbol trade counters on success.
+        """
+        # Determine whether any symbol has reached the checkpoint interval.
+        due = any(
+            count >= self._config.checkpoint_every
+            for count in self._trades_since_checkpoint.values()
+        )
+        if not due:
+            return False
+
+        # 1. Persist scorer states FIRST.
+        try:
+            self._store.save_all(self._registry.all_states())
+        except Exception as exc:
+            logger.warning(
+                "checkpoint save failed; Kafka offset NOT committed: %s", exc
+            )
+            # Do NOT commit offset – we'll retry on the next interval.
+            return False
+
+        # 2. Commit Kafka offset only after a successful checkpoint.
+        if last_msg is not None and self._consumer is not None:
+            try:
+                self._consumer.commit(asynchronous=False)
+            except Exception as exc:
+                logger.warning("Kafka offset commit failed: %s", exc)
+                # State is already checkpointed; a duplicate replay is safe.
+
+        self._trades_since_checkpoint.clear()
+        return True
 
     def flush_checkpoints(self) -> None:
         """Persist all scorer states (called on clean shutdown)."""
@@ -178,7 +217,11 @@ class ScoringService:
             event_id=event_id,
         )
 
-        self._maybe_checkpoint(symbol)
+        # Track how many trades have been processed since the last checkpoint.
+        sym_key = symbol.upper()
+        self._trades_since_checkpoint[sym_key] = (
+            self._trades_since_checkpoint.get(sym_key, 0) + 1
+        )
 
         if result.is_toxic:
             alert = build_alert(result, trade)
@@ -216,7 +259,8 @@ class ScoringService:
         """
         Main consumer loop.  Blocks until SIGINT/SIGTERM.
 
-        Restore → consume → process → (alert) → commit → checkpoint.
+        Ordering guarantee: checkpoint (PG) → commit offset (Kafka).
+        Kafka offsets are never ahead of the last successful checkpoint.
         """
         self._running = True
 
@@ -229,6 +273,8 @@ class ScoringService:
             self._config.kafka_alerts_topic,
         )
 
+        last_msg = None  # the most-recent Kafka message (used for batch commit)
+
         try:
             while self._running:
                 msg = self._consumer.poll(timeout=1.0)
@@ -239,14 +285,23 @@ class ScoringService:
                     continue
 
                 self.process_message(msg.value())
+                last_msg = msg
 
-                # Commit offset after successful processing (at-least-once).
-                self._consumer.commit(asynchronous=False)
+                # Checkpoint scorer states FIRST, then commit Kafka offset.
+                # This preserves the invariant:
+                #   checkpointed state ≥ committed offset position.
+                self._maybe_checkpoint_and_commit(last_msg)
 
         except KeyboardInterrupt:
             logger.info("interrupted by user")
         finally:
+            # Flush remaining in-memory state BEFORE committing the final offset.
             self.flush_checkpoints()
+            if last_msg is not None and self._consumer is not None:
+                try:
+                    self._consumer.commit(asynchronous=False)
+                except Exception as exc:
+                    logger.warning("final Kafka offset commit failed: %s", exc)
             if self._consumer:
                 self._consumer.close()
             if self._producer:
