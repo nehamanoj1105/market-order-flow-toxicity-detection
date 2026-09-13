@@ -55,3 +55,27 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+
+  scorer:
+    build:
+      context: ../scoring
+    image: tofd/scorer:dev
+    container_name: tofd-scorer
+    restart: unless-stopped
+    depends_on:
+      - kafka
+      - postgres
+    environment:
+      KAFKA_BROKERS: kafka:9092
+      KAFKA_TOPIC: trades.normalized
+      KAFKA_ALERTS_TOPIC: trades.alerts
+      KAFKA_GROUP_ID: tofd-scorer
+      KAFKA_AUTO_OFFSET_RESET: earliest
+      PG_DSN: postgresql://postgres:devpassword@postgres:5432/toxicflow
+      SCORER_EWMA_ALPHA: "0.1"
+      SCORER_MIN_TRADES: "10"
+      SCORER_DEFAULT_THRESHOLD: "3.0"
+      SCORER_THRESHOLD_BTCUSDT: "3.0"
+      SCORER_THRESHOLD_ETHUSDT: "3.0"
+      SCORER_THRESHOLD_DOGEUSDT: "2.5"
+      SCORER_CHECKPOINT_EVERY: "100"
