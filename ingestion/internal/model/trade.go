@@ -5,6 +5,7 @@
 package model
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -66,6 +67,8 @@ type Trade struct {
 	Price float64 `json:"price"`
 	// Quantity is the executed base-asset amount.
 	Quantity float64 `json:"quantity"`
+	// Size is the quantity traded (alias for shared/trade_schema.json).
+	Size float64 `json:"size"`
 	// QuoteQuantity is price*quantity, pre-computed for the scorer.
 	QuoteQuantity float64 `json:"quote_quantity"`
 	// Side is the aggressor side: BUY or SELL.
@@ -74,6 +77,8 @@ type Trade struct {
 	IsBuyerMaker bool `json:"is_buyer_maker"`
 	// TradeTimeMS is the exchange match timestamp (authoritative event time).
 	TradeTimeMS int64 `json:"trade_time_ms"`
+	// Timestamp is unix epoch milliseconds (alias for shared/trade_schema.json).
+	Timestamp int64 `json:"timestamp"`
 	// EventTimeMS is when the feed handed us the event.
 	EventTimeMS int64 `json:"event_time_ms"`
 	// IngestedAtMS is when the ingestor normalized the event.
@@ -87,6 +92,19 @@ type Trade struct {
 // Key returns the partition / routing key for the trade. Using exchange:symbol
 // keeps every trade of a market inside a single partition, which is what gives
 // the scorer per-symbol ordering without paying for global ordering.
+// MarshalJSON ensures size and timestamp schema aliases are populated.
+func (t Trade) MarshalJSON() ([]byte, error) {
+	type Alias Trade
+	aux := Alias(t)
+	if aux.Size == 0 {
+		aux.Size = aux.Quantity
+	}
+	if aux.Timestamp == 0 {
+		aux.Timestamp = aux.TradeTimeMS
+	}
+	return json.Marshal(aux)
+}
+
 func (t Trade) Key() string {
 	return t.Exchange + ":" + t.Symbol
 }

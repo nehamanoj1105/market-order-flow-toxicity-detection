@@ -10,10 +10,10 @@
 		},
 		"side": {
 			"type":"string",
-			"enum": ["buy","sell"]
+			"enum": ["buy","sell","BUY","SELL"]
 		},
 		"price": {
-			"type":"number",
+			"type":"number"
 		},
 		"size": {
 			"type":"number",
