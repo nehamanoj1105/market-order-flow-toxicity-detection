@@ -8,12 +8,18 @@ services:
     image: confluentinc/cp-kafka:7.6.0
     ports:
       - "9092:9092"
+      - "29092:29092"
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
+
+      KAFKA_LISTENERS: INTERNAL://0.0.0.0:9092,EXTERNAL://0.0.0.0:29092
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:9092,EXTERNAL://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+
     depends_on:
       - zookeeper
 
@@ -25,7 +31,9 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: devpassword
       POSTGRES_DB: toxicflow
-      
+    volumes:
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+
   ingestor:
     build:
       context: ../ingestion
@@ -42,17 +50,13 @@ services:
       FEED_MODE: csv
       CSV_PATH: /data/sample_binance_trades.csv
       CSV_SPEED: "50"
+      CSV_LOOP: "true"
       LOG_FORMAT: json
       STATS_EVERY: 15s
     volumes:
       - ../data:/data:ro
     ports:
       - "9090:9090"
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9090/healthz"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
 
   processing:
     build:
@@ -83,12 +87,26 @@ services:
       KAFKA_TOPIC: trades.normalized
       KAFKA_ALERTS_TOPIC: trades.alerts
       KAFKA_GROUP_ID: tofd-scorer
-      KAFKA_AUTO_OFFSET_RESET: earliest
       PG_DSN: postgresql://postgres:devpassword@postgres:5432/toxicflow
-      SCORER_EWMA_ALPHA: "0.1"
-      SCORER_MIN_TRADES: "10"
-      SCORER_DEFAULT_THRESHOLD: "3.0"
-      SCORER_THRESHOLD_BTCUSDT: "3.0"
-      SCORER_THRESHOLD_ETHUSDT: "3.0"
-      SCORER_THRESHOLD_DOGEUSDT: "2.5"
-      SCORER_CHECKPOINT_EVERY: "100"
+
+  dashboard:
+    build:
+      context: ../dashboard
+    image: tofd/dashboard:dev
+    volumes:
+      - ../dashboard:/app
+    container_name: tofd-dashboard
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_started
+      kafka:
+        condition: service_started
+    environment:
+      PG_DSN: postgresql://postgres:devpassword@postgres:5432/toxicflow
+      KAFKA_BROKERS: kafka:9092
+      JWT_SECRET: "9a8f4c2e1b7d3f6a0e5c8b2f4a1d3e6f9c8b7a6f5e4d3c2b1a0f9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1e0d9c8b7a6f5e4d3c2b1a0f9e8d7c6b5a4f3e2d"
+      ADMIN_USERNAME: "admin"
+      ADMIN_PASSWORD: "password"
+    ports:
+      - "8000:8000"

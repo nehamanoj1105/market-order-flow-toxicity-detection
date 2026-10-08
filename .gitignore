@@ -6,3 +6,15 @@ __pycache__/
 .idea/
 .vscode/
 data/BTCUSDT-trades-2026-09-04.csv
+
+# Generated binaries
+ingestion/bin/
+
+# Python test/cache files
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local reports/scripts
+git_pre_push_report.txt
+git_pre_push_check.sh

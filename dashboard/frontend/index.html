@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Toxic Order-flow Detector</title>
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+</head>
+
+<body>
+<header class="topbar">
+    <div>
+        <h1>TOFD</h1>
+        <span>Crytpocurrency Market Order Flow Detector</span>
+    </div>
+
+    <div class="connection">
+        <span id="connection-dot"></span>
+        <span id="connection-status">CONNECTING</span>
+    </div>
+</header>
+
+<main>
+    <section class="live-section">
+        <div class="section-heading">
+            <h2>Live Toxicity</h2>
+            <span id="alert-count">0 alerts</span>
+        </div>
+
+        <div id="live-alerts" class="alert-list">
+            <div class="empty-state">
+                Waiting for toxicity alerts...
+            </div>
+        </div>
+    </section>
+
+    <section class="history-section">
+        <div class="section-heading">
+            <h2>Alert History</h2>
+            <button id="refresh-history">Refresh</button>
+        </div>
+
+        <div class="history-filters">
+            <input type="text" id="filter-symbol"placeholder="Trading pair e.g. BTCUSDT">
+
+            <input type="datetime-local" id="filter-from" title="From timestamp">
+
+            <input type="datetime-local" id="filter-to" title="To timestamp">
+
+            <input type="number" id="filter-min-score" placeholder="Min Z-score" step="0.01">
+
+            <input type="number" id="filter-max-score" placeholder="Max Z-score" step="0.01">
+
+            <button id="apply-filters">Apply Filters</button>
+            <button id="clear-filters">Clear</button>
+        </div>
+
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Symbol</th>
+                        <th>Side</th>
+                        <th>Z-Score</th>
+                        <th>OFI</th>
+                        <th>Price</th>
+                        <th>Quantity</th>
+                    </tr>
+                </thead>
+
+                <tbody id="history-body">
+                    <tr>
+                        <td colspan="7" class="empty-state">
+                            Loading history...
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+   
+   <section class="config-section">
+        <div class="section-heading">
+            <h2>Configuration</h2>
+            <span id="config-status">Administrator access required</span>
+        </div>
+
+        <div class="config-login">
+            <input id="admin-username" type="text" placeholder="Admin username">
+            <input id="admin-password" type="password" placeholder="Admin password">
+            <button id="config-login-btn">Login</button>
+            <button id="config-logout-btn" hidden>Logout</button>
+        </div>
+
+        <div id="config-panel" hidden>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Symbol</th>
+                        <th>Z Threshold</th>
+                        <th>EWMA Alpha</th>
+                        <th>Min Trades</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="config-body"></tbody>
+            </table>
+        </div>
+    </section> 
+</main>
+<div id="notification-container"></div>
+<script src="/static/js/dashboard.js"></script>
+</body>
+</html>
