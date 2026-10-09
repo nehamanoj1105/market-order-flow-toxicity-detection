@@ -280,7 +280,7 @@ func (a *app) handle(raw feed.RawTrade) {
 	exchange := strings.ToLower(strings.TrimSpace(raw.Exchange))
 	symbol := model.NormalizeSymbol(raw.Symbol)
 
-	if a.dedup != nil && raw.Source != model.SourceCSV && a.dedup.Seen(exchange, symbol, raw.TradeID) {
+	if a.dedup != nil && a.dedup.Seen(exchange, symbol, raw.TradeID) {
 		a.metrics.DuplicateTotal(exchange, symbol)
 		return
 	}

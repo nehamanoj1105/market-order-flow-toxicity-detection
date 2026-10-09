@@ -18,6 +18,7 @@ Default:
 import argparse
 import json
 import time
+import uuid
 from datetime import datetime, timedelta, timezone
 
 from kafka import KafkaProducer
@@ -68,7 +69,7 @@ def build_alert(index: int, base_time: datetime) -> dict:
         signed_ofi *= -1
 
     return {
-        "event_id": f"SYNTHETIC-{index + 1:03d}",
+        "event_id": str(uuid.uuid5(uuid.NAMESPACE_DNS, f"synthetic-{index + 1:03d}")),
         "alert_type": "toxicity",
         "exchange": "BINANCE",
         "ewma": 0.0,
@@ -91,7 +92,7 @@ def main():
     parser.add_argument(
         "--brokers",
         default="localhost:29092",
-        help="Kafka bootstrap server(s), default: localhost:9092",
+        help="Kafka bootstrap server(s), default: localhost:29092",
     )
     parser.add_argument(
         "--topic",

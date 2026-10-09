@@ -47,6 +47,7 @@ services:
     environment:
       BROKER: kafka
       KAFKA_BROKERS: kafka:9092
+      KAFKA_TOPIC: trades.raw
       FEED_MODE: csv
       CSV_PATH: /data/sample_binance_trades.csv
       CSV_SPEED: "50"
@@ -71,6 +72,7 @@ services:
       KAFKA_GROUP_ID: processing-group
       INPUT_TOPIC: trades.raw
       OUTPUT_TOPIC: trades.normalized
+      DLQ_TOPIC: trades.normalized.dlq
       NUM_WORKERS: "4"
 
   scorer:

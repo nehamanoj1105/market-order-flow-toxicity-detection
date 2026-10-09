@@ -11,7 +11,7 @@
 <header class="topbar">
     <div>
         <h1>TOFD</h1>
-        <span>Crytpocurrency Market Order Flow Detector</span>
+        <span>Cryptocurrency Market Order Flow Detector</span>
     </div>
 
     <div class="connection">
@@ -41,7 +41,7 @@
         </div>
 
         <div class="history-filters">
-            <input type="text" id="filter-symbol"placeholder="Trading pair e.g. BTCUSDT">
+            <input type="text" id="filter-symbol" placeholder="Trading pair e.g. BTCUSDT">
 
             <input type="datetime-local" id="filter-from" title="From timestamp">
 
@@ -108,6 +108,18 @@
             </table>
         </div>
     </section> 
+
+    <section class="export-section" id="export-section" hidden>
+        <div class="section-heading">
+            <h2>CSV Export</h2>
+            <span id="export-status"></span>
+        </div>
+
+        <div class="export-controls">
+            <input type="text" id="export-symbol" placeholder="Symbol filter (optional, e.g. BTCUSDT)">
+            <button id="export-csv-btn">Download CSV</button>
+        </div>
+    </section>
 </main>
 <div id="notification-container"></div>
 <script src="/static/js/dashboard.js"></script>

@@ -239,3 +239,91 @@ button:hover {
         grid-template-columns: 1fr 1fr;
     }
 }
+
+/* ---- Configuration Section ---- */
+
+.config-section {
+    border: 1px solid #30363d;
+    padding: 18px;
+    background: #161b22;
+}
+
+.config-login {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.config-login input {
+    border: 1px solid #30363d;
+    background: #0d1117;
+    color: #c9d1d9;
+    padding: 7px 10px;
+    font-family: inherit;
+    font-size: 12px;
+    min-width: 160px;
+}
+
+.config-login input:focus {
+    outline: none;
+    border-color: #8b949e;
+}
+
+#config-status {
+    color: #7d8590;
+    font-size: 12px;
+}
+
+#config-panel {
+    margin-top: 12px;
+}
+
+#config-panel input {
+    border: 1px solid #30363d;
+    background: #0d1117;
+    color: #c9d1d9;
+    padding: 5px 8px;
+    font-family: inherit;
+    font-size: 12px;
+    width: 80px;
+}
+
+#config-panel input:focus {
+    outline: none;
+    border-color: #8b949e;
+}
+
+/* ---- CSV Export Section ---- */
+
+.export-section {
+    border: 1px solid #30363d;
+    padding: 18px;
+    background: #161b22;
+}
+
+.export-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.export-controls input {
+    border: 1px solid #30363d;
+    background: #0d1117;
+    color: #c9d1d9;
+    padding: 7px 10px;
+    font-family: inherit;
+    font-size: 12px;
+    min-width: 220px;
+}
+
+.export-controls input:focus {
+    outline: none;
+    border-color: #8b949e;
+}
+
+#export-status {
+    color: #7d8590;
+    font-size: 12px;
+}

@@ -14,8 +14,8 @@ class AlertOut(BaseModel):
 	side: str
 	quantity: float
 	price: float
-	trade_time: int
-	alert_time: datetime
+	trade_time_ms: int
+	alerted_at: datetime
 	
 class LoginRequest(BaseModel):
 	username: str

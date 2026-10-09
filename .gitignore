@@ -18,3 +18,7 @@ htmlcov/
 # Local reports/scripts
 git_pre_push_report.txt
 git_pre_push_check.sh
+
+# Virtual environments
+.venv/
+venv/

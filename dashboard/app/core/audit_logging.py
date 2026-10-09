@@ -1,31 +1,6 @@
-"""Small asyncpg helper for persistent UC-04 audit logging."""
+"""Audit logging helper for persistent UC-04 audit records."""
 
 from typing import Any, Optional
+from app.core.database import write_audit_log
 
-from app.core.database import db
-
-
-async def write_audit_log(
-    event_type: str,
-    *,
-    actor: str = "system",
-    symbol: Optional[str] = None,
-    event_id: Optional[str] = None,
-    details: Optional[dict[str, Any]] = None,
-) -> None:
-    if db.pool is None:
-        raise RuntimeError("Database pool is not initialized")
-
-    await db.pool.execute(
-        """
-        INSERT INTO audit_logs (
-            event_type, actor, symbol, event_id, details
-        )
-        VALUES ($1, $2, $3, $4::uuid, $5::jsonb)
-        """,
-        event_type,
-        actor,
-        symbol,
-        event_id,
-        __import__("json").dumps(details or {}),
-    )
+__all__ = ["write_audit_log"]

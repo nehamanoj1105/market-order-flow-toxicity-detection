@@ -372,6 +372,7 @@ async function loginAdmin() {
         document.getElementById("config-login-btn").hidden = true;
         document.getElementById("config-logout-btn").hidden = false;
         document.getElementById("config-panel").hidden = false;
+        document.getElementById("export-section").hidden = false;
 
         await loadConfigurations();
 
@@ -565,6 +566,7 @@ function logoutAdmin() {
     );
 
     document.getElementById("config-panel").hidden = true;
+    document.getElementById("export-section").hidden = true;
 
     document.getElementById("config-login-btn").hidden = false;
 
@@ -572,6 +574,59 @@ function logoutAdmin() {
 
     document.getElementById("config-status").textContent =
         "Administrator access required";
+}
+
+
+/* =========================================================
+   CSV EXPORT
+   ========================================================= */
+
+async function downloadCSV() {
+    const exportStatus = document.getElementById("export-status");
+    const symbol = document.getElementById("export-symbol").value.trim();
+
+    if (!authToken) {
+        exportStatus.textContent = "Login required for CSV export";
+        return;
+    }
+
+    exportStatus.textContent = "Downloading...";
+
+    try {
+        const params = new URLSearchParams();
+        if (symbol) {
+            params.set("symbol", symbol);
+        }
+
+        const response = await fetch(
+            `/api/export?${params.toString()}`,
+            { headers: authHeaders() }
+        );
+
+        if (response.status === 401) {
+            logoutAdmin();
+            return;
+        }
+
+        if (!response.ok) {
+            exportStatus.textContent = "Export failed";
+            return;
+        }
+
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `toxicity_alerts_${symbol || "all"}.csv`;
+        link.click();
+        URL.revokeObjectURL(url);
+
+        exportStatus.textContent = "Export complete";
+
+    } catch (error) {
+        console.error("Export error:", error);
+        exportStatus.textContent = "Export failed";
+    }
 }
 
 
@@ -664,6 +719,17 @@ if (configLogoutButton) {
 }
 
 
+const exportCsvButton =
+    document.getElementById("export-csv-btn");
+
+if (exportCsvButton) {
+    exportCsvButton.addEventListener(
+        "click",
+        downloadCSV
+    );
+}
+
+
 /* =========================================================
    INITIALIZATION
    ========================================================= */
@@ -684,6 +750,7 @@ if (authToken) {
     document.getElementById("config-login-btn").hidden = true;
     document.getElementById("config-logout-btn").hidden = false;
     document.getElementById("config-panel").hidden = false;
+    document.getElementById("export-section").hidden = false;
 
     loadConfigurations();
 }

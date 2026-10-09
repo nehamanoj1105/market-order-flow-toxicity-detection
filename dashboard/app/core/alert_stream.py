@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import uuid
 from datetime import datetime, timezone
 from aiokafka import AIOKafkaConsumer
 
@@ -45,6 +46,16 @@ class AlertStream:
                         continue
                         
                     if alert.get("alert_type") == "toxicity":
+                        # Ensure event_id is a valid UUID for PostgreSQL
+                        raw_event_id = alert.get("event_id")
+                        try:
+                            if raw_event_id:
+                                event_uuid = str(uuid.UUID(str(raw_event_id)))
+                            else:
+                                event_uuid = str(uuid.uuid4())
+                        except (ValueError, TypeError, AttributeError):
+                            event_uuid = str(uuid.uuid5(uuid.NAMESPACE_DNS, str(raw_event_id)))
+
                         # -------------------------------------------------
                         # 1. Persist alert in PostgreSQL
                         # -------------------------------------------------
@@ -72,7 +83,7 @@ class AlertStream:
                                     $7, $8, $9, $10, $11, $12
                                 )
                                 """,
-                                alert.get("event_id"),
+                                event_uuid,
                                 alert.get("symbol"),
                                 alert.get("exchange"),
                                 alert.get("z_score"),
@@ -86,7 +97,11 @@ class AlertStream:
                                 (
                                     datetime.fromisoformat(alert["timestamp"].replace("Z", "+00:00"))
                                     if alert.get("timestamp")
-                                    else datetime.now(timezone.utc)
+                                    else (
+                                        datetime.fromtimestamp(alert["alerted_at_ms"] / 1000.0, timezone.utc)
+                                        if alert.get("alerted_at_ms")
+                                        else datetime.now(timezone.utc)
+                                    )
                                 ),
                             )
 
@@ -103,7 +118,7 @@ class AlertStream:
                             "ALERT",
                             actor="system",
                             symbol=alert.get("symbol"),
-                            event_id=alert.get("event_id"),
+                            event_id=event_uuid,
                             details={
                                 "exchange": alert.get("exchange"),
                                 "z_score": alert.get("z_score"),

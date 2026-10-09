@@ -28,24 +28,24 @@ def show_notification(alert):
 
     notification.application_name = "TOFD"
     notification.title = f"TOXICITY ALERT — {symbol}"
+    notification.urgency = "critical"
 
     notification.message = (
         f"{side} · Z {z_score:.2f}\n"
         f"Price: ${price:,.2f}"
     )
-    notification.launch = "http://localhost:8000/"
-    notification.send()
+    notification.send(block=False)
 
 
 def connect_and_listen():
-    logger.info("Connecting to TOFD notification stream...")
+    logger.info("Connecting to TOFD notification stream at %s...", WS_URL)
 
     ws = create_connection(
         WS_URL,
         timeout=30
     )
 
-    logger.info("Connected to TOFD backend")
+    logger.info("Connected to TOFD backend. Listening for toxicity alerts...")
 
     while True:
         message = ws.recv()
@@ -59,15 +59,18 @@ def connect_and_listen():
             continue
 
         logger.info(
-            "Received toxicity alert: %s Z=%.2f",
+            "🚨 TOXICITY ALERT | %s | %s | Z=%.2f | Price=$%s | Qty=%s",
             alert.get("symbol"),
-            float(alert.get("z_score", 0))
+            alert.get("side"),
+            float(alert.get("z_score", 0)),
+            f"{float(alert.get('price', 0)):,.2f}",
+            f"{float(alert.get('quantity', 0)):,.4f}",
         )
 
         try:
             show_notification(alert)
-        except Exception:
-            logger.exception("Failed to display system notification")
+        except Exception as exc:
+            logger.warning("Desktop notification could not be displayed: %s", exc)
 
 
 def main():
